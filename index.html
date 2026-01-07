@@ -235,6 +235,59 @@
             transform: translateY(0);
         }
 
+        .warning-box {
+            background: rgba(245, 158, 11, 0.15);
+            border: 2px solid #f59e0b;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+            animation: shake 0.5s;
+        }
+
+        .warning-box.show {
+            display: block;
+        }
+
+        .warning-box .warning-icon {
+            font-size: 1.2em;
+            margin-right: 10px;
+        }
+
+        .warning-box .warning-text {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+
+        .warning-box .warning-details {
+            color: #fcd34d;
+            font-size: 0.9em;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .input-status {
+            margin-top: 8px;
+            font-size: 0.85em;
+            display: none;
+        }
+
+        .input-status.valid {
+            color: #10b981;
+            display: block;
+        }
+
+        .input-status.invalid {
+            color: #ef4444;
+            display: block;
+        }
+
         @media (max-width: 600px) {
             .container {
                 padding: 25px;
@@ -257,17 +310,25 @@
 <body>
     <div class="container">
         <h1>⚡ Loadstring Generator</h1>
-        <p class="subtitle">A lightweight utility that converts your RAW scripts into a single line script!</p>
-        <p class="subtitle">Can only be use in Roblox Executors</p>
+        <p class="subtitle">A lightweight utility that converts your RAW scripts into a single line script!<br>Can only be use in Roblox Executors</p>
 
         <div class="input-group">
-            <label for="urlInput">Paste script url: </label>
+            <label for="urlInput">Script URL</label>
             <input 
                 type="text" 
                 id="urlInput" 
                 placeholder="https://example.com/script.lua"
                 autocomplete="off"
             >
+            <div id="inputStatus" class="input-status"></div>
+        </div>
+
+        <div id="warningBox" class="warning-box">
+            <div>
+                <span class="warning-icon">⚠️</span>
+                <span class="warning-text">Invalid URL Detected!</span>
+            </div>
+            <div class="warning-details" id="warningDetails"></div>
         </div>
 
         <div class="options">
@@ -305,6 +366,108 @@
     <script>
         let history = [];
 
+        function validateURL(url) {
+            if (!url || url.trim() === '') {
+                return { valid: false, message: 'URL cannot be empty' };
+            }
+
+            const trimmedUrl = url.trim();
+            
+            // Check if it looks like a URL at all
+            if (!trimmedUrl.includes('.') && !trimmedUrl.includes('/')) {
+                return { 
+                    valid: false, 
+                    message: 'This doesn\'t appear to be a valid URL. URLs should contain a domain (e.g., example.com)' 
+                };
+            }
+
+            // Try to parse as URL
+            try {
+                let testUrl = trimmedUrl;
+                
+                // Add protocol if missing for validation
+                if (!testUrl.startsWith('http://') && !testUrl.startsWith('https://')) {
+                    testUrl = 'https://' + testUrl;
+                }
+
+                const urlObj = new URL(testUrl);
+                
+                // Check if domain has valid structure
+                const hostname = urlObj.hostname;
+                if (!hostname || hostname.length < 3) {
+                    return { 
+                        valid: false, 
+                        message: 'Invalid domain name. Please check your URL.' 
+                    };
+                }
+
+                // Check for valid domain pattern
+                const domainPattern = /^[a-zA-Z0-9][a-zA-Z0-9-_.]+\.[a-zA-Z]{2,}$/;
+                if (!domainPattern.test(hostname)) {
+                    return { 
+                        valid: false, 
+                        message: 'Domain format is invalid. Make sure it follows the pattern: example.com' 
+                    };
+                }
+
+                // Check if it's just a protocol
+                if (urlObj.pathname === '/' && urlObj.hostname === '') {
+                    return { 
+                        valid: false, 
+                        message: 'URL is incomplete. Please provide a full URL with a domain.' 
+                    };
+                }
+
+                // Warning for non-HTTPS (but still valid)
+                if (!trimmedUrl.startsWith('https://') && !trimmedUrl.startsWith('http://')) {
+                    return { 
+                        valid: true, 
+                        warning: true,
+                        message: 'URL is missing protocol (http:// or https://). Auto-format will add https://' 
+                    };
+                }
+
+                return { valid: true, message: 'Valid URL format ✓' };
+
+            } catch (e) {
+                return { 
+                    valid: false, 
+                    message: 'Invalid URL format. Please enter a complete URL (e.g., https://example.com/script.lua)' 
+                };
+            }
+        }
+
+        function checkURL() {
+            const urlInput = document.getElementById('urlInput');
+            const url = urlInput.value;
+            const warningBox = document.getElementById('warningBox');
+            const warningDetails = document.getElementById('warningDetails');
+            const inputStatus = document.getElementById('inputStatus');
+
+            if (!url) {
+                warningBox.classList.remove('show');
+                inputStatus.style.display = 'none';
+                return;
+            }
+
+            const validation = validateURL(url);
+
+            if (!validation.valid) {
+                warningBox.classList.add('show');
+                warningDetails.textContent = validation.message;
+                inputStatus.textContent = '✗ ' + validation.message;
+                inputStatus.className = 'input-status invalid';
+            } else if (validation.warning) {
+                warningBox.classList.remove('show');
+                inputStatus.textContent = '⚠ ' + validation.message;
+                inputStatus.className = 'input-status invalid';
+            } else {
+                warningBox.classList.remove('show');
+                inputStatus.textContent = '✓ ' + validation.message;
+                inputStatus.className = 'input-status valid';
+            }
+        }
+
         function generateLoadstring() {
             const urlInput = document.getElementById('urlInput');
             const url = urlInput.value.trim();
@@ -313,6 +476,14 @@
 
             if (!url) {
                 showToast('⚠️ Please enter a URL', 'warning');
+                return;
+            }
+
+            // Validate URL first
+            const validation = validateURL(url);
+            if (!validation.valid) {
+                showToast('❌ Invalid URL! Please check the warning message.', 'error');
+                checkURL(); // Update warning display
                 return;
             }
 
@@ -350,6 +521,8 @@
             document.getElementById('output').textContent = 'Your loadstring will appear here...';
             document.getElementById('output').classList.add('empty');
             document.getElementById('copyBtn').style.display = 'none';
+            document.getElementById('warningBox').classList.remove('show');
+            document.getElementById('inputStatus').style.display = 'none';
             showToast('🗑️ Cleared');
         }
 
@@ -383,6 +556,7 @@
             document.getElementById('output').textContent = item.loadstring;
             document.getElementById('output').classList.remove('empty');
             document.getElementById('copyBtn').style.display = 'block';
+            checkURL();
             showToast('📥 Loaded from history');
         }
 
@@ -410,8 +584,17 @@
             }
         });
 
+        document.getElementById('urlInput').addEventListener('input', () => {
+            checkURL();
+        });
+
+        document.getElementById('urlInput').addEventListener('blur', () => {
+            checkURL();
+        });
+
         document.getElementById('urlInput').addEventListener('paste', (e) => {
             setTimeout(() => {
+                checkURL();
                 if (document.getElementById('autoFormat').checked) {
                     generateLoadstring();
                 }
