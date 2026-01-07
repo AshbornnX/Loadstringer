@@ -229,6 +229,17 @@
             transform: translateY(0);
         }
 
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
         button.secondary {
             background: linear-gradient(135deg, #4c1d95, #6b21a8);
         }
@@ -323,6 +334,7 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
+            margin-bottom: 15px;
         }
 
         .history-item {
@@ -370,6 +382,54 @@
 
         .delete-button:hover {
             box-shadow: 0 3px 10px rgba(220, 38, 38, 0.4);
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .pagination-button {
+            padding: 8px 16px;
+            font-size: 0.9em;
+            background: linear-gradient(135deg, #4c1d95, #6b21a8);
+            min-width: auto;
+        }
+
+        .pagination-button:hover:not(:disabled) {
+            box-shadow: 0 4px 12px rgba(107, 33, 168, 0.4);
+        }
+
+        .pagination-info {
+            color: #c084fc;
+            font-size: 0.9em;
+            padding: 0 10px;
+        }
+
+        .page-numbers {
+            display: flex;
+            gap: 5px;
+        }
+
+        .page-number {
+            padding: 8px 12px;
+            font-size: 0.9em;
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            min-width: auto;
+        }
+
+        .page-number:hover:not(:disabled) {
+            background: rgba(168, 85, 247, 0.2);
+            border-color: rgba(168, 85, 247, 0.5);
+        }
+
+        .page-number.active {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            border-color: transparent;
         }
 
         .toast {
@@ -427,6 +487,16 @@
 
             .delete-button {
                 width: 100%;
+            }
+
+            .pagination {
+                flex-wrap: wrap;
+            }
+
+            .page-numbers {
+                order: 3;
+                width: 100%;
+                justify-content: center;
             }
         }
     </style>
@@ -501,6 +571,7 @@
                 <button class="clear-all-button" onclick="clearHistory()">🗑️ Clear All</button>
             </div>
             <div class="history-list" id="historyList"></div>
+            <div class="pagination" id="pagination"></div>
         </div>
     </div>
 
@@ -508,7 +579,9 @@
 
     <script>
         let history = [];
+        let currentPage = 1;
         const STORAGE_KEY = 'loadstring-history';
+        const ITEMS_PER_PAGE = 10;
 
         function loadHistory() {
             try {
@@ -691,6 +764,7 @@
             };
             
             history.unshift(item);
+            currentPage = 1;
             updateHistoryDisplay();
             saveHistory();
         }
@@ -709,6 +783,16 @@
             return `${days}d ago`;
         }
 
+        function getTotalPages() {
+            return Math.ceil(history.length / ITEMS_PER_PAGE);
+        }
+
+        function getPageItems() {
+            const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+            const endIndex = startIndex + ITEMS_PER_PAGE;
+            return history.slice(startIndex, endIndex);
+        }
+
         function updateHistoryDisplay() {
             const historySection = document.getElementById('historySection');
             const historyList = document.getElementById('historyList');
@@ -722,15 +806,95 @@
             historySection.style.display = 'block';
             historyCount.textContent = history.length;
             
-            historyList.innerHTML = history.map((item, index) => `
-                <div class="history-item">
-                    <div class="history-item-info" onclick="loadFromHistory(${index})">
-                        <div class="history-url">${item.url}</div>
-                        <div class="history-time">${formatTimestamp(item.timestamp)}</div>
+            const pageItems = getPageItems();
+            const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+            
+            historyList.innerHTML = pageItems.map((item, index) => {
+                const actualIndex = startIndex + index;
+                return `
+                    <div class="history-item">
+                        <div class="history-item-info" onclick="loadFromHistory(${actualIndex})">
+                            <div class="history-url">${item.url}</div>
+                            <div class="history-time">${formatTimestamp(item.timestamp)}</div>
+                        </div>
+                        <button class="delete-button" onclick="deleteHistoryItem(${actualIndex})">🗑️</button>
                     </div>
-                    <button class="delete-button" onclick="deleteHistoryItem(${index})">🗑️</button>
-                </div>
-            `).join('');
+                `;
+            }).join('');
+
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const pagination = document.getElementById('pagination');
+            const totalPages = getTotalPages();
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let paginationHTML = `
+                <button class="pagination-button" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
+                    ← Previous
+                </button>
+            `;
+
+            paginationHTML += '<div class="page-numbers">';
+            
+            const maxPagesToShow = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+            
+            if (endPage - startPage < maxPagesToShow - 1) {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+
+            if (startPage > 1) {
+                paginationHTML += `
+                    <button class="page-number" onclick="changePage(1)">1</button>
+                `;
+                if (startPage > 2) {
+                    paginationHTML += '<span class="pagination-info">...</span>';
+                }
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                paginationHTML += `
+                    <button class="page-number ${i === currentPage ? 'active' : ''}" onclick="changePage(${i})" ${i === currentPage ? 'disabled' : ''}>
+                        ${i}
+                    </button>
+                `;
+            }
+
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    paginationHTML += '<span class="pagination-info">...</span>';
+                }
+                paginationHTML += `
+                    <button class="page-number" onclick="changePage(${totalPages})">${totalPages}</button>
+                `;
+            }
+
+            paginationHTML += '</div>';
+
+            paginationHTML += `
+                <button class="pagination-button" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
+                    Next →
+                </button>
+            `;
+
+            pagination.innerHTML = paginationHTML;
+        }
+
+        function changePage(page) {
+            const totalPages = getTotalPages();
+            if (page < 1 || page > totalPages) return;
+            
+            currentPage = page;
+            updateHistoryDisplay();
+            
+            document.getElementById('historySection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         function loadFromHistory(index) {
@@ -746,6 +910,12 @@
 
         function deleteHistoryItem(index) {
             history.splice(index, 1);
+            
+            const totalPages = getTotalPages();
+            if (currentPage > totalPages && currentPage > 1) {
+                currentPage = totalPages;
+            }
+            
             updateHistoryDisplay();
             saveHistory();
             showToast('🗑️ Item deleted');
@@ -754,6 +924,7 @@
         function clearHistory() {
             if (confirm('Clear all history? This cannot be undone.')) {
                 history = [];
+                currentPage = 1;
                 updateHistoryDisplay();
                 saveHistory();
                 showToast('🗑️ History cleared');
